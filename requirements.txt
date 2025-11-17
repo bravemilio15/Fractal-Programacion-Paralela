@@ -1,0 +1,14 @@
+# Requirements para Sistema de Mandelbrot Zoom Distribuido
+# Instalación: pip install -r requirements.txt
+
+# === MASTER (Linux) ===
+fabric>=3.0.0          # Conexión SSH y ejecución remota
+pillow>=10.0.0         # Manejo de imágenes PNG
+numpy>=1.24.0          # Operaciones numéricas
+imageio>=2.31.0        # Ensamblaje de video
+imageio-ffmpeg>=0.4.9  # Codec H.264 para MP4
+
+# === WORKERS (Windows/Linux) ===
+# Solo necesitan:
+# pillow>=10.0.0
+# numpy>=1.24.0
