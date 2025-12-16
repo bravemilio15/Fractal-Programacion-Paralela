@@ -1,0 +1,90 @@
+# GUÍA DE CONFIGURACIÓN Y EJECUCIÓN DEL CLUSTER DASK
+
+Este documento proporciona los pasos necesarios para configurar y ejecutar el cluster distribuido (maestro y workers) para el cálculo de factoriales.
+
+## 1. PASOS GENERALES (PARA TODAS LAS MÁQUINAS: MAESTRO Y WORKERS)
+
+Estos pasos deben realizarse en *cada* máquina que participará en el cluster.
+
+1.  **Copia los archivos del proyecto:** Asegúrate de que los archivos `master.py`, `worker.py`, y `requirements.txt` estén en un mismo directorio en cada máquina.
+
+2.  **Abre una Terminal y Navega al Directorio del Proyecto:**
+    ```bash
+    cd /ruta/al/directorio/del/proyecto
+    ```
+    (Reemplaza `/ruta/al/directorio/del/proyecto` con la ruta real, por ejemplo, `cd C:\Users\usuario\Desktop\cluster`).
+
+3.  **Crea un Entorno Virtual (venv):**
+    ```bash
+    python -m venv venv
+    ```
+    Esto creará una carpeta `venv` con una instalación aislada de Python.
+
+4.  **Activa el Entorno Virtual:**
+    *   **En Windows:**
+        ```bash
+        .\venv\Scripts\activate
+        ```
+    *   **En macOS/Linux:**
+        ```bash
+        source venv/bin/activate
+        ```
+    Verás `(venv)` en tu prompt de la terminal, indicando que el entorno está activo.
+
+5.  **Instala las Dependencias:**
+    ```bash
+    pip install -r requirements.txt
+    ```
+    Esto instalará todas las librerías necesarias con las versiones correctas.
+
+---
+
+## 2. CONFIGURACIÓN Y EJECUCIÓN DEL MAESTRO (UNA SOLA MÁQUINA)
+
+Estos pasos son solo para la máquina que actuará como maestro.
+
+1.  **Asegúrate de que el Entorno Virtual esté Activado:**
+    Si no lo está, actívalo como se explicó en el paso 4 de la sección "PASOS GENERALES".
+
+2.  **Inicia el Script del Maestro:**
+    ```bash
+    python master.py
+    ```
+    El maestro se iniciará y te mostrará un mensaje similar a:
+    `Scheduler iniciado en: tcp://<DIRECCIÓN_IP_DEL_MAESTRO>:8786`
+    `Dashboard disponible en: http://<DIRECCIÓN_IP_DEL_MAESTRO>:8787`
+
+    **¡ANOTA la `<DIRECCIÓN_IP_DEL_MAESTRO>`!** Necesitarás esta IP para que los workers se conecten. Es la IP local de tu máquina en la red (ej. 192.168.1.100).
+
+3.  **Espera a que los Workers se Conecten:**
+    El maestro estará esperando y te mostrará el número de workers conectados.
+
+4.  **Inicia el Cálculo:**
+    Cuando tengas suficientes workers conectados (o estés listo para iniciar con los que tengas), escribe `start` y presiona Enter en la terminal del maestro.
+
+---
+
+## 3. CONFIGURACIÓN Y EJECUCIÓN DE LOS WORKERS (MÚLTIPLES MÁQUINAS)
+
+Estos pasos son para cada máquina que actuará como worker.
+
+1.  **Asegúrate de que el Entorno Virtual esté Activado:**
+    Si no lo está, actívalo como se explicó en el paso 4 de la sección "PASOS GENERALES".
+
+2.  **Inicia el Script del Worker:**
+    Usa la IP del maestro que anotaste en el paso 2 de la sección "EJECUCIÓN DEL MAESTRO".
+    ```bash
+    python worker.py <DIRECCIÓN_IP_DEL_MAESTRO>
+    ```
+    Por ejemplo:
+    ```bash
+    python worker.py 192.168.1.100
+    ```
+    El worker intentará conectarse al maestro. Si tiene éxito, verás un mensaje como "Worker conectado exitosamente!".
+
+3.  **El Worker Esperará Tareas:**
+    Una vez conectado, el worker estará en espera pasiva, listo para recibir y ejecutar tareas del maestro.
+
+---
+
+¡Eso es todo! Con estos pasos, tu cluster Dask debería estar funcionando y listo para distribuir los cálculos de factoriales.
