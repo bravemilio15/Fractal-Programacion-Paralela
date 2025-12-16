@@ -1,8 +1,17 @@
+# Requirements para Proyecto Final - Programación Paralela
+# Instalación: pip install -r requirements.txt
+
+# === DASK Cluster (Unidad 2) ===
 dask[complete]
 distributed>=2022.2.0
 bokeh>=2.4.2
-numpy
-pandas
-pillow
-imageio
-imageio-ffmpeg
+
+# === Mandelbrot Zoom Distribuido ===
+fabric>=3.0.0          # Conexión SSH y ejecución remota
+
+# === Dependencias Comunes ===
+numpy>=1.24.0          # Operaciones numéricas
+pandas                 # Análisis de datos
+pillow>=10.0.0         # Manejo de imágenes PNG
+imageio>=2.31.0        # Ensamblaje de video
+imageio-ffmpeg>=0.4.9  # Codec H.264 para MP4
