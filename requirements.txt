@@ -19,3 +19,4 @@ imageio-ffmpeg>=0.4.9  # Codec H.264 para MP4
 # === GUI (PyQt5) ===
 PyQt5>=5.15.0          # Framework GUI
 PyQt5-Qt5>=5.15.2      # Qt bindings
+python-vlc>=3.0.0      # VLC backend para video playback

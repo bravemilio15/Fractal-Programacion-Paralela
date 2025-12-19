@@ -8,8 +8,9 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QH
                              QTabWidget, QTableWidget, QTableWidgetItem, QTextEdit,
                              QProgressBar, QFrame, QGridLayout, QScrollArea, QGroupBox,
                              QMessageBox, QFileDialog)
-from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer
 from PyQt5.QtGui import QPalette, QColor, QFont, QPixmap, QImage
+from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer
+import vlc
 from dask.distributed import Client, LocalCluster, as_completed
 import imageio.v2 as imageio
 import socket
@@ -364,15 +365,45 @@ class MasterWindow(QMainWindow):
         
         # Video Controls
         video_group = QGroupBox("Generacion de Video")
-        video_layout = QHBoxLayout()
+        video_layout = QVBoxLayout()
+        
+        # Player Area
+        player_layout = QHBoxLayout()
+        
+        self.video_frame = QFrame()
+        self.video_frame.setMinimumHeight(400)
+        self.video_frame.setStyleSheet("background-color: black;")
+        player_layout.addWidget(self.video_frame)
+        
+        video_layout.addLayout(player_layout)
+        
+        # Controls
+        controls_layout = QHBoxLayout()
         
         self.generate_video_button = QPushButton("Generar Video MP4")
         self.generate_video_button.clicked.connect(self.generate_video)
         self.generate_video_button.setEnabled(False)
-        video_layout.addWidget(self.generate_video_button)
+        controls_layout.addWidget(self.generate_video_button)
+        
+        self.play_button = QPushButton("Reproducir")
+        self.play_button.clicked.connect(self.play_video)
+        self.play_button.setEnabled(False)
+        controls_layout.addWidget(self.play_button)
+        
+        self.stop_button = QPushButton("Detener")
+        self.stop_button.clicked.connect(self.stop_video)
+        self.stop_button.setEnabled(False)
+        controls_layout.addWidget(self.stop_button)
+        
+        video_layout.addLayout(controls_layout)
         
         video_group.setLayout(video_layout)
         layout.addWidget(video_group)
+        
+        # VLC Player Init
+        self.vlc_instance = vlc.Instance()
+        self.media_player = self.vlc_instance.media_player_new()
+        self.current_video_path = None
         
         return tab
     
@@ -629,9 +660,52 @@ class MasterWindow(QMainWindow):
             self.log(f"Video generado: {os.path.abspath(video_path)}")
             QMessageBox.information(self, "Exito", f"Video generado:\n{os.path.abspath(video_path)}")
             
+            # Auto-play
+            self.play_button.setEnabled(True)
+            self.load_and_play_video(os.path.abspath(video_path))
+            
         except Exception as e:
             self.log(f"ERROR generando video: {str(e)}")
             QMessageBox.critical(self, "Error", f"Error generando video:\n{str(e)}")
+
+    def load_and_play_video(self, path):
+        """Cargar y reproducir video"""
+        try:
+            self.current_video_path = path
+            media = self.vlc_instance.media_new(path)
+            self.media_player.set_media(media)
+            
+            # Configurar salida de video en Windows
+            if sys.platform.startswith('win'):
+                self.media_player.set_hwnd(int(self.video_frame.winId()))
+            elif sys.platform == 'darwin':
+                self.media_player.set_nsobject(int(self.video_frame.winId()))
+            else:
+                self.media_player.set_xwindow(int(self.video_frame.winId()))
+            
+            self.play_button.setEnabled(True)
+            self.stop_button.setEnabled(True)
+            self.media_player.play()
+            self.play_button.setText("Pausa")
+            self.log("Video cargado y reproduciendo")
+            
+        except Exception as e:
+            self.log(f"Error cargando video: {str(e)}")
+            QMessageBox.warning(self, "Error", f"No se pudo cargar el video:\n{str(e)}")
+
+    def play_video(self):
+        """Alternar reproducción"""
+        if self.media_player.is_playing():
+            self.media_player.pause()
+            self.play_button.setText("Reproducir")
+        else:
+            self.media_player.play()
+            self.play_button.setText("Pausa")
+
+    def stop_video(self):
+        """Detener video"""
+        self.media_player.stop()
+        self.play_button.setText("Reproducir")
     
     def log(self, message):
         """Agregar mensaje al log"""
