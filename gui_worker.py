@@ -1,0 +1,382 @@
+import sys
+import io
+import asyncio
+import platform
+import uuid
+import time
+from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
+                             QHBoxLayout, QLabel, QProgressBar, QFrame, QListWidget)
+from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer, QSize
+from PyQt5.QtGui import QPixmap, QImage, QPalette, QColor, QFont
+from PIL import Image
+from dask.distributed import Worker
+import dask
+
+# Configuración Robustez WiFi
+dask.config.set({
+    "distributed.comm.timeouts.connect": "45s",
+    "distributed.comm.timeouts.tcp": "45s",
+})
+
+
+class WorkerThread(QThread):
+    """Thread para ejecutar el Dask Worker sin bloquear la GUI"""
+    connection_status = pyqtSignal(bool, str)  # (connected, message)
+    frame_started = pyqtSignal(int)  # frame_num
+    frame_completed = pyqtSignal(int, float)  # frame_num, time_seconds
+    task_info = pyqtSignal(str)  # info message
+    
+    def __init__(self, scheduler_ip, gui_window):
+        super().__init__()
+        self.scheduler_ip = scheduler_ip
+        self.worker_name = f"Worker-{platform.node()}-{str(uuid.uuid4())[:4]}"
+        self.running = True
+        self.gui_window = gui_window
+        self.current_frame = None
+        self.frame_start_time = None
+    
+    def run(self):
+        """Ejecutar worker en thread separado"""
+        # Redirigir stdout para capturar mensajes
+        import sys
+        from io import StringIO
+        
+        # Crear buffer para capturar prints
+        self.stdout_buffer = StringIO()
+        original_stdout = sys.stdout
+        
+        # Wrapper para capturar y procesar prints
+        class TeeOutput:
+            def __init__(self, original, callback):
+                self.original = original
+                self.callback = callback
+            
+            def write(self, text):
+                self.original.write(text)
+                self.callback(text)
+            
+            def flush(self):
+                self.original.flush()
+        
+        sys.stdout = TeeOutput(original_stdout, self.process_output)
+        
+        try:
+            asyncio.run(self.start_worker())
+        finally:
+            sys.stdout = original_stdout
+    
+    def process_output(self, text):
+        """Procesar output para detectar frames"""
+        if "[FRAME" in text:
+            try:
+                # Detectar inicio de frame
+                if "Renderizando" in text:
+                    import re
+                    match = re.search(r'\[FRAME (\d+)\]', text)
+                    if match:
+                        frame_num = int(match.group(1))
+                        self.current_frame = frame_num
+                        self.frame_start_time = time.time()
+                        self.frame_started.emit(frame_num)
+                        self.task_info.emit(f"Renderizando Frame {frame_num}...")
+                
+                # Detectar fin de frame
+                elif "Listo" in text:
+                    import re
+                    match = re.search(r'\[FRAME (\d+)\]', text)
+                    if match:
+                        frame_num = int(match.group(1))
+                        if self.frame_start_time:
+                            elapsed = time.time() - self.frame_start_time
+                            self.frame_completed.emit(frame_num, elapsed)
+                            self.task_info.emit(f"Frame {frame_num} completado")
+                        self.current_frame = None
+                        self.frame_start_time = None
+            except Exception as e:
+                print(f"Error processing output: {e}")
+    
+    async def start_worker(self):
+        """Iniciar worker y conectar al scheduler"""
+        direccion_master = f"tcp://{self.scheduler_ip}:8786"
+        
+        try:
+            self.connection_status.emit(False, f"Conectando a {self.scheduler_ip}...")
+            
+            async with Worker(direccion_master, name=self.worker_name) as w:
+                self.connection_status.emit(True, f"Conectado a {self.scheduler_ip}")
+                
+                # El worker ahora está activo y esperando tareas
+                await w.finished()
+                
+        except Exception as e:
+            self.connection_status.emit(False, f"Error: {str(e)}")
+
+
+class WorkerWindow(QMainWindow):
+    """Ventana principal del Worker con preview en tiempo real"""
+    
+    def __init__(self, scheduler_ip):
+        super().__init__()
+        self.scheduler_ip = scheduler_ip
+        self.current_frame = None
+        self.frames_completed = 0
+        self.total_data_sent = 0
+        self.frame_history = []
+        
+        self.init_ui()
+        self.apply_dark_theme()
+        self.start_worker_thread()
+    
+    def init_ui(self):
+        """Inicializar interfaz de usuario"""
+        self.setWindowTitle("Dask Worker - Mandelbrot Renderer")
+        self.setGeometry(100, 100, 700, 550)
+        
+        # Widget central
+        central_widget = QWidget()
+        self.setCentralWidget(central_widget)
+        main_layout = QVBoxLayout(central_widget)
+        main_layout.setSpacing(10)
+        main_layout.setContentsMargins(15, 15, 15, 15)
+        
+        # Header Panel
+        header_frame = QFrame()
+        header_frame.setFrameStyle(QFrame.StyledPanel)
+        header_layout = QHBoxLayout(header_frame)
+        
+        self.status_led = QLabel("●")
+        self.status_led.setStyleSheet("color: #e74c3c; font-size: 20px;")
+        header_layout.addWidget(self.status_led)
+        
+        self.connection_label = QLabel("Desconectado")
+        self.connection_label.setFont(QFont("Segoe UI", 10, QFont.Bold))
+        header_layout.addWidget(self.connection_label)
+        
+        header_layout.addStretch()
+        
+        self.worker_name_label = QLabel("")
+        self.worker_name_label.setFont(QFont("Segoe UI", 9))
+        header_layout.addWidget(self.worker_name_label)
+        
+        main_layout.addWidget(header_frame)
+        
+        # Content Layout (Preview + Stats)
+        content_layout = QHBoxLayout()
+        
+        # Preview Canvas (Left)
+        preview_frame = QFrame()
+        preview_frame.setFrameStyle(QFrame.StyledPanel)
+        preview_layout = QVBoxLayout(preview_frame)
+        
+        self.preview_label = QLabel("Esperando tareas del Master...")
+        self.preview_label.setAlignment(Qt.AlignCenter)
+        self.preview_label.setMinimumSize(500, 380)
+        self.preview_label.setStyleSheet("background-color: #2b2b2b; color: #b0b0b0;")
+        preview_layout.addWidget(self.preview_label)
+        
+        content_layout.addWidget(preview_frame, 3)
+        
+        # Stats Panel (Right)
+        stats_frame = QFrame()
+        stats_frame.setFrameStyle(QFrame.StyledPanel)
+        stats_frame.setMaximumWidth(200)
+        stats_layout = QVBoxLayout(stats_frame)
+        
+        # Current Frame
+        stats_layout.addWidget(QLabel("Frame Actual:"))
+        self.current_frame_label = QLabel("--")
+        self.current_frame_label.setFont(QFont("Segoe UI", 12, QFont.Bold))
+        self.current_frame_label.setStyleSheet("color: #00d4ff;")
+        stats_layout.addWidget(self.current_frame_label)
+        
+        stats_layout.addSpacing(10)
+        
+        # Progress Bar (Vertical)
+        stats_layout.addWidget(QLabel("Progreso:"))
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setOrientation(Qt.Vertical)
+        self.progress_bar.setMinimumHeight(150)
+        self.progress_bar.setTextVisible(True)
+        stats_layout.addWidget(self.progress_bar, alignment=Qt.AlignCenter)
+        
+        stats_layout.addSpacing(10)
+        
+        # Stats
+        stats_layout.addWidget(QLabel("Completados:"))
+        self.completed_label = QLabel("0 frames")
+        stats_layout.addWidget(self.completed_label)
+        
+        stats_layout.addWidget(QLabel("Datos Enviados:"))
+        self.data_sent_label = QLabel("0.0 MB")
+        stats_layout.addWidget(self.data_sent_label)
+        
+        stats_layout.addSpacing(10)
+        
+        # History
+        stats_layout.addWidget(QLabel("Historial:"))
+        self.history_list = QListWidget()
+        self.history_list.setMaximumHeight(100)
+        stats_layout.addWidget(self.history_list)
+        
+        stats_layout.addStretch()
+        
+        content_layout.addWidget(stats_frame, 1)
+        
+        main_layout.addLayout(content_layout)
+        
+        # Footer Panel
+        footer_frame = QFrame()
+        footer_frame.setFrameStyle(QFrame.StyledPanel)
+        footer_layout = QVBoxLayout(footer_frame)
+        
+        self.status_label = QLabel("Esperando conexión...")
+        self.status_label.setFont(QFont("Segoe UI", 9))
+        footer_layout.addWidget(self.status_label)
+        
+        self.footer_progress = QProgressBar()
+        self.footer_progress.setMaximum(100)
+        footer_layout.addWidget(self.footer_progress)
+        
+        main_layout.addWidget(footer_frame)
+    
+    def apply_dark_theme(self):
+        """Aplicar tema oscuro a la aplicación"""
+        palette = QPalette()
+        palette.setColor(QPalette.Window, QColor(53, 53, 53))
+        palette.setColor(QPalette.WindowText, Qt.white)
+        palette.setColor(QPalette.Base, QColor(43, 43, 43))
+        palette.setColor(QPalette.AlternateBase, QColor(53, 53, 53))
+        palette.setColor(QPalette.ToolTipBase, Qt.white)
+        palette.setColor(QPalette.ToolTipText, Qt.white)
+        palette.setColor(QPalette.Text, Qt.white)
+        palette.setColor(QPalette.Button, QColor(53, 53, 53))
+        palette.setColor(QPalette.ButtonText, Qt.white)
+        palette.setColor(QPalette.BrightText, Qt.red)
+        palette.setColor(QPalette.Highlight, QColor(0, 212, 255))
+        palette.setColor(QPalette.HighlightedText, Qt.black)
+        
+        self.setPalette(palette)
+    
+    def start_worker_thread(self):
+        """Iniciar thread del worker"""
+        self.worker_thread = WorkerThread(self.scheduler_ip, self)
+        self.worker_thread.connection_status.connect(self.on_connection_status)
+        self.worker_thread.frame_started.connect(self.on_frame_started)
+        self.worker_thread.frame_completed.connect(self.on_frame_completed)
+        self.worker_thread.task_info.connect(self.on_task_info)
+        self.worker_thread.start()
+        
+        # Timer para animar LED
+        self.led_timer = QTimer()
+        self.led_timer.timeout.connect(self.animate_led)
+        self.led_timer.start(1000)
+        self.led_state = False
+        
+        # Timer para simular progreso mientras renderiza
+        self.progress_timer = QTimer()
+        self.progress_timer.timeout.connect(self.update_simulated_progress)
+        self.progress_value = 0
+    
+    def animate_led(self):
+        """Animar LED de conexión"""
+        if hasattr(self, 'is_connected') and self.is_connected:
+            if self.led_state:
+                self.status_led.setStyleSheet("color: #2ecc71; font-size: 20px;")
+            else:
+                self.status_led.setStyleSheet("color: #27ae60; font-size: 20px;")
+            self.led_state = not self.led_state
+    
+    def on_connection_status(self, connected, message):
+        """Actualizar estado de conexión"""
+        self.is_connected = connected
+        self.connection_label.setText(message)
+        
+        if connected:
+            self.status_led.setStyleSheet("color: #2ecc71; font-size: 20px;")
+            self.worker_name_label.setText(self.worker_thread.worker_name)
+            self.status_label.setText("Conectado. Esperando tareas...")
+        else:
+            self.status_led.setStyleSheet("color: #e74c3c; font-size: 20px;")
+            self.status_label.setText(message)
+    
+    def on_frame_started(self, frame_num):
+        """Callback cuando inicia un frame"""
+        self.current_frame = frame_num
+        self.current_frame_label.setText(f"#{frame_num}")
+        self.status_label.setText(f"Renderizando Frame {frame_num}...")
+        self.progress_bar.setValue(0)
+        self.footer_progress.setValue(0)
+        self.progress_value = 0
+        
+        # Iniciar animación de progreso
+        self.progress_timer.start(200)  # Actualizar cada 200ms
+        
+        # Cambiar preview a mensaje de renderizado
+        self.preview_label.setText(f"Renderizando Frame {frame_num}...\n\nEl preview aparecerá al completar")
+    
+    def update_simulated_progress(self):
+        """Actualizar progreso simulado mientras renderiza"""
+        if self.progress_value < 95:
+            # Incremento variable para simular progreso realista
+            increment = 2 if self.progress_value < 50 else 1
+            self.progress_value = min(95, self.progress_value + increment)
+            self.progress_bar.setValue(self.progress_value)
+            self.footer_progress.setValue(self.progress_value)
+    
+    def on_task_info(self, message):
+        """Callback para información de tareas"""
+        self.status_label.setText(message)
+    
+    def on_frame_completed(self, frame_num, time_seconds):
+        """Callback cuando completa un frame"""
+        self.frames_completed += 1
+        self.progress_timer.stop()
+        self.progress_bar.setValue(100)
+        self.footer_progress.setValue(100)
+        
+        # Actualizar stats
+        self.completed_label.setText(f"{self.frames_completed} frames")
+        self.status_label.setText(f"Frame {frame_num} completado en {time_seconds:.2f}s")
+        
+        # Simular datos enviados (estimación)
+        frame_size_mb = 0.08  # ~80KB promedio
+        self.total_data_sent += frame_size_mb
+        self.data_sent_label.setText(f"{self.total_data_sent:.1f} MB")
+        
+        # Agregar a historial
+        history_text = f"Frame {frame_num}: {time_seconds:.2f}s"
+        self.history_list.insertItem(0, history_text)
+        if self.history_list.count() > 5:
+            self.history_list.takeItem(5)
+        
+        # Mostrar mensaje de completado en preview
+        self.preview_label.setText(f"Frame {frame_num} completado!\n\n{time_seconds:.2f} segundos\n\nEsperando siguiente tarea...")
+    
+    def closeEvent(self, event):
+        """Manejar cierre de ventana"""
+        if hasattr(self, 'worker_thread'):
+            self.worker_thread.running = False
+            self.worker_thread.quit()
+            self.worker_thread.wait()
+        event.accept()
+
+
+def main():
+    """Punto de entrada principal"""
+    if len(sys.argv) < 2:
+        print("Uso: python gui_worker.py <IP_MASTER>")
+        sys.exit(1)
+    
+    scheduler_ip = sys.argv[1]
+    
+    app = QApplication(sys.argv)
+    app.setStyle("Fusion")
+    
+    window = WorkerWindow(scheduler_ip)
+    window.show()
+    
+    sys.exit(app.exec_())
+
+
+if __name__ == "__main__":
+    main()

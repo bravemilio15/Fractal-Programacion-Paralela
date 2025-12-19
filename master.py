@@ -163,4 +163,23 @@ def main():
     cluster.close()
 
 if __name__ == "__main__":
-    main()
+    # Verificar si se solicita modo GUI o CLI
+    if "--no-gui" in sys.argv:
+        # Modo CLI original
+        main()
+    else:
+        # Modo GUI
+        try:
+            from PyQt5.QtWidgets import QApplication
+            from gui_master import MasterWindow
+            
+            app = QApplication(sys.argv)
+            window = MasterWindow()
+            window.show()
+            sys.exit(app.exec_())
+            
+        except ImportError:
+            print("ERROR: PyQt5 no esta instalado.")
+            print("Instala con: pip install PyQt5")
+            print("O ejecuta en modo CLI con: python master.py --no-gui")
+            sys.exit(1)

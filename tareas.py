@@ -22,10 +22,11 @@ def obtener_color(iteraciones, max_iter):
         b = int(255 * (1 - ratio ** 0.2))
         return (r, g, b)
 
-def generar_frame_mandelbrot(params):
+def generar_frame_mandelbrot(params, progress_callback=None):
     """
     Genera un frame completo en memoria.
     Recibe un diccionario 'params' para facilitar el envío con Dask.
+    Opcionalmente acepta progress_callback(row, total_rows, img_copy) para GUI.
     Retorna: (número_frame, bytes_de_la_imagen)
     """
     # Desempaquetamos parámetros
@@ -43,7 +44,7 @@ def generar_frame_mandelbrot(params):
     pixels = img.load()
 
     # Log para que veas trabajar al worker
-    print(f"🎨 [FRAME {frame_num}] Renderizando Mandelbrot...", flush=True)
+    print(f"[FRAME {frame_num}] Renderizando Mandelbrot...", flush=True)
 
     for row in range(height):
         for col in range(width):
@@ -53,6 +54,14 @@ def generar_frame_mandelbrot(params):
             
             iters = calcular_mandelbrot(complex(x, y), max_iter)
             pixels[col, row] = obtener_color(iters, max_iter)
+        
+        # Reportar progreso cada 50 filas para GUI
+        if progress_callback and row % 50 == 0 and row > 0:
+            try:
+                progress_callback(row, height, img.copy())
+            except Exception as e:
+                # No fallar si el callback tiene problemas
+                print(f"[WARNING] Progress callback error: {e}", flush=True)
 
     # Convertimos la imagen a BYTES para enviarla por la red
     # (Así no guardamos archivos en el disco del worker)
@@ -60,6 +69,6 @@ def generar_frame_mandelbrot(params):
     img.save(img_byte_arr, format='PNG')
     img_bytes = img_byte_arr.getvalue()
 
-    print(f"✅ [FRAME {frame_num}] Listo. Enviando {len(img_bytes)/1024:.1f} KB al Master.", flush=True)
+    print(f"[FRAME {frame_num}] Listo. Enviando {len(img_bytes)/1024:.1f} KB al Master.", flush=True)
     
     return frame_num, img_bytes

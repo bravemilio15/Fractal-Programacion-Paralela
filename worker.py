@@ -30,10 +30,35 @@ async def iniciar_obrero(scheduler_ip):
         print(f"\n❌ Error: {e}")
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        print("Uso: python worker.py <IP_MASTER>")
+    if len(sys.argv) < 2:
+        print("Uso: python worker.py <IP_MASTER> [--no-gui]")
         sys.exit(1)
-    try:
-        asyncio.run(iniciar_obrero(sys.argv[1]))
-    except KeyboardInterrupt:
-        print("\n👋 Worker apagado.")
+    
+    scheduler_ip = sys.argv[1]
+    
+    # Verificar si se solicita modo GUI o CLI
+    if "--no-gui" in sys.argv:
+        # Modo CLI original
+        try:
+            asyncio.run(iniciar_obrero(scheduler_ip))
+        except KeyboardInterrupt:
+            print("\nWorker apagado.")
+    else:
+        # Modo GUI
+        try:
+            from PyQt5.QtWidgets import QApplication
+            from gui_worker import WorkerWindow
+            
+            app = QApplication(sys.argv)
+            app.setStyle("Fusion")
+            
+            window = WorkerWindow(scheduler_ip)
+            window.show()
+            
+            sys.exit(app.exec_())
+            
+        except ImportError:
+            print("ERROR: PyQt5 no esta instalado.")
+            print("Instala con: pip install PyQt5")
+            print("O ejecuta en modo CLI con: python worker.py <IP> --no-gui")
+            sys.exit(1)

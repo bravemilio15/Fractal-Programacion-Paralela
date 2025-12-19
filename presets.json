@@ -1,0 +1,46 @@
+{
+  "480p_rapido": {
+    "name": "480p Rapido",
+    "description": "Ideal para pruebas rapidas (1-2 min)",
+    "width": 854,
+    "height": 480,
+    "total_frames": 30,
+    "max_iter": 80,
+    "zoom_final": 5000.0,
+    "x_centro": -0.7436438870371587,
+    "y_centro": 0.1318259042053119
+  },
+  "720p_hd": {
+    "name": "720p HD",
+    "description": "Balance calidad/tiempo (3-5 min)",
+    "width": 1280,
+    "height": 720,
+    "total_frames": 50,
+    "max_iter": 100,
+    "zoom_final": 15000.0,
+    "x_centro": -0.7436438870371587,
+    "y_centro": 0.1318259042053119
+  },
+  "1080p_fullhd": {
+    "name": "1080p Full HD",
+    "description": "Alta calidad (10-15 min)",
+    "width": 1920,
+    "height": 1080,
+    "total_frames": 100,
+    "max_iter": 150,
+    "zoom_final": 30000.0,
+    "x_centro": -0.7436438870371587,
+    "y_centro": 0.1318259042053119
+  },
+  "custom": {
+    "name": "Custom",
+    "description": "Configuracion personalizada",
+    "width": 800,
+    "height": 608,
+    "total_frames": 50,
+    "max_iter": 100,
+    "zoom_final": 15000.0,
+    "x_centro": -0.7436438870371587,
+    "y_centro": 0.1318259042053119
+  }
+}

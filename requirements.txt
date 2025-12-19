@@ -15,3 +15,7 @@ pandas                 # Análisis de datos
 pillow>=10.0.0         # Manejo de imágenes PNG
 imageio>=2.31.0        # Ensamblaje de video
 imageio-ffmpeg>=0.4.9  # Codec H.264 para MP4
+
+# === GUI (PyQt5) ===
+PyQt5>=5.15.0          # Framework GUI
+PyQt5-Qt5>=5.15.2      # Qt bindings
