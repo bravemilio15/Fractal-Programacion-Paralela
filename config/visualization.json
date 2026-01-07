@@ -1,0 +1,41 @@
+{
+  "progressive_rendering": {
+    "enabled": true,
+    "lines_per_update": 10,
+    "update_frequency_ms": 150,
+    "min_delay_per_line_ms": 0,
+    "max_delay_per_line_ms": 50,
+    "adaptive_delay": true,
+    "adaptive_threshold_lines_per_sec": 100
+  },
+  "worker_preview": {
+    "update_interval_ms": 200,
+    "show_current_line_indicator": true,
+    "show_line_counter": true,
+    "show_speed_indicator": true,
+    "smooth_progress_animation": true
+  },
+  "master_dashboard": {
+    "update_interval_ms": 500,
+    "show_mini_previews": true,
+    "preview_size_px": 120,
+    "show_line_progress": true,
+    "show_render_speed": true,
+    "animate_progress_bars": true,
+    "highlight_active_workers": true
+  },
+  "visual_effects": {
+    "enable_animations": true,
+    "enable_glow_effect": true,
+    "enable_fade_in": false,
+    "enable_particles": false,
+    "enable_sound": false
+  },
+  "colors": {
+    "idle": "#7f8c8d",
+    "rendering": "#3498db",
+    "rendering_glow": "#00d4ff",
+    "completed": "#2ecc71",
+    "error": "#e74c3c"
+  }
+}

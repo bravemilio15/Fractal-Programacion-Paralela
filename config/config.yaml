@@ -1,0 +1,54 @@
+# Configuración del Sistema de Renderizado Distribuido
+
+cluster:
+  scheduler_port: 8786
+  dashboard_port: 8787
+  host: '0.0.0.0'
+  n_workers: 0  # 0 = sin workers locales (solo remotos)
+  
+  timeouts:
+    connect: 60s
+    tcp: 60s
+  
+  worker:
+    profile_interval: 2000ms
+
+rendering:
+  default_preset: "720p_hd"
+  output_dir: "./frames_renderizados"
+  video_output: "mandelbrot_zoom.mp4"
+  fps: 15
+  
+  # Usar versión optimizada con NumPy/Numba
+  use_optimized: true
+  
+  # Comprimir frames antes de enviar por red
+  # NOTA: Desactivado por defecto para mejor compatibilidad con GUI
+  compress_frames: false
+  compression_level: 6  # 1-9, mayor = más compresión pero más lento
+
+cache:
+  enabled: true
+  cache_dir: "./cache"
+  max_size_mb: 1024  # Tamaño máximo del caché en MB
+  auto_cleanup: true
+
+logging:
+  level: INFO  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+  console: true
+  file: true
+  log_dir: "./logs"
+
+fractals:
+  mandelbrot:
+    default_center:
+      x: -0.7436438870371587
+      y: 0.1318259042053119
+    zoom_range:
+      initial: 1.0
+      final: 30000.0
+
+gui:
+  theme: dark
+  auto_refresh_interval: 1000  # ms
+  preview_update_interval: 50  # Actualizar preview cada N filas
