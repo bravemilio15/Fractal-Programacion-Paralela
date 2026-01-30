@@ -37,19 +37,21 @@ class RenderThread(QThread):
     render_finished = pyqtSignal(float)
     render_error = pyqtSignal(str)
     
-    def __init__(self, config, client, db, render_id, tracker):
+    def __init__(self, config, client, db, render_id, tracker, fractal_type='mandelbrot', julia_params=None):
         super().__init__()
         self.config = config
         self.client = client
         self.db = db
         self.render_id = render_id
         self.tracker = tracker
+        self.fractal_type = fractal_type
+        self.julia_params = julia_params or {}
         self.running = True
     
     def run(self):
         """Ejecutar renderizado"""
         try:
-            from tareas import generar_frame_mandelbrot
+            from tareas import generar_frame_fractal
             
             total_frames = self.config['total_frames']
             start_time = time.time()
@@ -62,8 +64,17 @@ class RenderThread(QThread):
                 t = i / (total_frames - 1) if total_frames > 1 else 0
                 zoom_actual = self.config['zoom_inicial'] * (self.config['zoom_final'] / self.config['zoom_inicial']) ** t
                 
-                ancho = 3.5 / zoom_actual
-                alto = 2.5 / zoom_actual
+                # Calcular parámetros según tipo de fractal
+                if self.fractal_type == 'mandelbrot':
+                    ancho = 3.5 / zoom_actual
+                    alto = 2.5 / zoom_actual
+                elif self.fractal_type == 'julia':
+                    # Julia usa región más amplia: [-2, 2]
+                    ancho = 4.0 / zoom_actual
+                    alto = 4.0 / zoom_actual
+                else:
+                    ancho = 3.5 / zoom_actual
+                    alto = 2.5 / zoom_actual
                 
                 params = {
                     'frame_num': i,
@@ -73,8 +84,15 @@ class RenderThread(QThread):
                     'x_min': self.config['x_centro'] - ancho / 2,
                     'x_max': self.config['x_centro'] + ancho / 2,
                     'y_min': self.config['y_centro'] - alto / 2,
-                    'y_max': self.config['y_centro'] + alto / 2
+                    'y_max': self.config['y_centro'] + alto / 2,
                 }
+                
+                # Agregar tipo de fractal y parámetros específicos
+                if self.fractal_type == 'julia':
+                    params['fractal_type'] = 'julia'
+                    params['fractal_params'] = self.julia_params
+                elif self.fractal_type == 'mandelbrot':
+                    params['fractal_type'] = 'mandelbrot'
                 lista_tareas.append(params)
             
             # Registrar workers conectados al inicio
@@ -86,7 +104,7 @@ class RenderThread(QThread):
                 self.log_message.emit(f"Worker registrado: {worker_name} ({worker_ip})")
             
             # Enviar tareas al cluster
-            futures = self.client.map(generar_frame_mandelbrot, lista_tareas)
+            futures = self.client.map(generar_frame_fractal, lista_tareas)
             self.log_message.emit(f"Tareas enviadas. Recibiendo resultados...")
             
             frames_guardados = 0
@@ -270,6 +288,71 @@ class MasterWindow(QMainWindow):
         layout = QVBoxLayout(tab)
         layout.setSpacing(15)
         
+        # Fractal Type Selector (NUEVO)
+        fractal_type_group = QGroupBox("Tipo de Fractal")
+        fractal_type_layout = QVBoxLayout()
+        
+        self.fractal_type_combo = QComboBox()
+        self.fractal_type_combo.addItem("Mandelbrot", "mandelbrot")
+        self.fractal_type_combo.addItem("Julia", "julia")
+        
+        # Cargar tipo desde config
+        from utils.config import config
+        default_fractal = config.get('rendering.fractal_type', 'mandelbrot')
+        index = 0 if default_fractal == 'mandelbrot' else 1
+        self.fractal_type_combo.setCurrentIndex(index)
+        
+        self.fractal_type_combo.currentIndexChanged.connect(self.on_fractal_type_changed)
+        fractal_type_layout.addWidget(self.fractal_type_combo)
+        
+        fractal_type_group.setLayout(fractal_type_layout)
+        layout.addWidget(fractal_type_group)
+        
+        # Julia Parameters Panel (solo visible cuando Julia está seleccionado)
+        self.julia_params_group = QGroupBox("Parámetros de Julia")
+        julia_params_layout = QVBoxLayout()
+        
+        # c_real parameter
+        c_real_layout = QHBoxLayout()
+        c_real_layout.addWidget(QLabel("c (real):"))
+        self.c_real_spin = QDoubleSpinBox()
+        self.c_real_spin.setRange(-2.0, 2.0)
+        self.c_real_spin.setSingleStep(0.01)
+        self.c_real_spin.setDecimals(6)
+        self.c_real_spin.setValue(config.get('fractals.julia.c_real', -0.7))
+        c_real_layout.addWidget(self.c_real_spin)
+        julia_params_layout.addLayout(c_real_layout)
+        
+        # c_imag parameter
+        c_imag_layout = QHBoxLayout()
+        c_imag_layout.addWidget(QLabel("c (imag):"))
+        self.c_imag_spin = QDoubleSpinBox()
+        self.c_imag_spin.setRange(-2.0, 2.0)
+        self.c_imag_spin.setSingleStep(0.01)
+        self.c_imag_spin.setDecimals(6)
+        self.c_imag_spin.setValue(config.get('fractals.julia.c_imag', 0.27015))
+        c_imag_layout.addWidget(self.c_imag_spin)
+        julia_params_layout.addLayout(c_imag_layout)
+        
+        # Presets de valores de c interesantes
+        julia_presets_layout = QHBoxLayout()
+        julia_presets_layout.addWidget(QLabel("Presets:"))
+        self.julia_preset_combo = QComboBox()
+        self.julia_preset_combo.addItem("Douady's Rabbit", (-0.7, 0.27015))
+        self.julia_preset_combo.addItem("San Marco", (-0.4, 0.6))
+        self.julia_preset_combo.addItem("Siegel Disk", (0.285, 0.01))
+        self.julia_preset_combo.addItem("Dragón", (-0.70176, -0.3842))
+        self.julia_preset_combo.addItem("Custom", None)
+        self.julia_preset_combo.currentIndexChanged.connect(self.on_julia_preset_changed)
+        julia_presets_layout.addWidget(self.julia_preset_combo)
+        julia_params_layout.addLayout(julia_presets_layout)
+        
+        self.julia_params_group.setLayout(julia_params_layout)
+        layout.addWidget(self.julia_params_group)
+        
+        # Inicialmente ocultar si Mandelbrot está seleccionado
+        self.julia_params_group.setVisible(default_fractal == 'julia')
+        
         # Preset Selector
         preset_group = QGroupBox("Preset de Configuracion")
         preset_layout = QVBoxLayout()
@@ -340,7 +423,7 @@ class MasterWindow(QMainWindow):
         self.zoom_slider.setValue(15000)
         self.zoom_slider.valueChanged.connect(self.update_zoom_label)
         anim_layout.addWidget(self.zoom_slider, 2, 1)
-        self.zoom_label = QLabel("15000x")
+        self.zoom_label = QLabel("15,000x")
         anim_layout.addWidget(self.zoom_label, 2, 2)
         
         anim_group.setLayout(anim_layout)
@@ -780,7 +863,32 @@ class MasterWindow(QMainWindow):
         self.iter_label.setText(str(value))
     
     def update_zoom_label(self, value):
-        self.zoom_label.setText(f"{value}x")
+        self.zoom_label.setText(f"{value:,.0f}x")
+    
+    def on_fractal_type_changed(self, index):
+        """Callback cuando cambia el tipo de fractal."""
+        fractal_type = self.fractal_type_combo.currentData()
+        
+        # Mostrar/ocultar panel de parámetros de Julia
+        self.julia_params_group.setVisible(fractal_type == 'julia')
+        
+        # Ajustar zoom recomendado según fractal
+        if fractal_type == 'julia':
+            # Julia no necesita zoom extremo
+            if self.zoom_slider.value() > 100:
+                self.zoom_slider.setValue(2)
+        elif fractal_type == 'mandelbrot':
+            # Mandelbrot se ve mejor con zoom profundo
+            if self.zoom_slider.value() < 100:
+                self.zoom_slider.setValue(5000)
+    
+    def on_julia_preset_changed(self, index):
+        """Callback cuando cambia el preset de Julia."""
+        preset_value = self.julia_preset_combo.currentData()
+        if preset_value is not None:
+            c_real, c_imag = preset_value
+            self.c_real_spin.setValue(c_real)
+            self.c_imag_spin.setValue(c_imag)
     
     def check_recovery(self):
         """Verifica si hay renders pendientes de recuperar."""
@@ -899,7 +1007,30 @@ class MasterWindow(QMainWindow):
             QMessageBox.warning(self, "Sin Workers", "Necesitas al menos 1 worker conectado")
             return
         
-        # Preparar configuración
+        # Configuración del renderizado
+        fractal_type = self.fractal_type_combo.currentData()
+        
+        # Parámetros de Julia si aplica
+        julia_params = None
+        if fractal_type == 'julia':
+            julia_params = {
+                'c_real': self.c_real_spin.value(),
+                'c_imag': self.c_imag_spin.value()
+            }
+        
+        # Crear directorio único con timestamp
+        from datetime import datetime
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        if fractal_type == 'julia':
+            c_real = self.c_real_spin.value()
+            c_imag = self.c_imag_spin.value()
+            render_name = f"julia_c{c_real:.3f}{c_imag:+.3f}i_{timestamp}"
+        else:
+            render_name = f"{fractal_type}_{timestamp}"
+        
+        base_output_dir = './frames_renderizados'
+        output_dir = os.path.join(base_output_dir, render_name)
+        
         config = {
             'width': self.width_slider.value(),
             'height': self.height_slider.value(),
@@ -909,12 +1040,16 @@ class MasterWindow(QMainWindow):
             'zoom_final': self.zoom_slider.value(),
             'x_centro': self.x_spin.value(),
             'y_centro': self.y_spin.value(),
-            'output_dir': './frames_renderizados',
-            'preset': self.preset_combo.currentData()
+            'output_dir': output_dir,
+            'preset': self.preset_combo.currentData(),
+            'fractal_type': fractal_type,
+            'julia_params': julia_params
         }
         
+        self.log(f"Directorio de salida: {output_dir}")
+        
         # Registrar render en base de datos
-        self.render_id = self.db.start_render('mandelbrot', config)
+        self.render_id = self.db.start_render(fractal_type, config)
         self.log(f"Render registrado con ID: {self.render_id}")
         
         # Inicializar tracker de progreso
@@ -929,7 +1064,7 @@ class MasterWindow(QMainWindow):
         self.clear_gallery()
         
         # Iniciar thread de renderizado
-        self.render_thread = RenderThread(config, self.client, self.db, self.render_id, self.tracker)
+        self.render_thread = RenderThread(config, self.client, self.db, self.render_id, self.tracker, fractal_type, julia_params)
         self.render_thread.log_message.connect(self.log)
         self.render_thread.frame_completed.connect(self.on_frame_completed)
         self.render_thread.render_finished.connect(self.on_render_finished)
@@ -1018,16 +1153,21 @@ class MasterWindow(QMainWindow):
     
     def generate_video(self):
         """Generar video MP4"""
+        if not self.frames_data:
+            QMessageBox.warning(self, "Sin Frames", "No hay frames renderizados para generar video")
+            return
+        
         try:
-            output_dir = './frames_renderizados'
-            video_path = './mandelbrot_zoom.mp4'
-            total_frames = self.frames_slider.value()
+            # Get output dir from last render
+            output_dir = self.render_thread.config.get('output_dir', './frames_renderizados') if self.render_thread else './frames_renderizados'
+            
+            video_path = os.path.join(output_dir, 'video.mp4') # Guardar video en el mismo directorio de frames
             
             self.log("Generando video MP4...")
             
-            # Usar imageio v3 API
+            # Buscar frames en el directorio
             frames = []
-            for i in range(total_frames):
+            for i in sorted(self.frames_data.keys()):
                 ruta = os.path.join(output_dir, f"frame_{i:04d}.png")
                 if os.path.exists(ruta):
                     try:

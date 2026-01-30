@@ -103,12 +103,15 @@ def _publish_worker_progress(frame_num: int, progress: int, status: str = 'rende
         logger.debug(f"No se pudo publicar progreso: {e}")
 
 
-def generar_frame_mandelbrot(
+def generar_frame_fractal(
     params: Dict[str, Any],
     progress_callback: Optional[Callable[[int, int, Image.Image], None]] = None
 ) -> Tuple[int, bytes]:
     """
-    Genera un frame completo del fractal de Mandelbrot.
+    Genera un frame completo de cualquier tipo de fractal.
+    
+    Soporta múltiples tipos de fractales (Mandelbrot, Julia, etc.)
+    mediante selección dinámica del renderer basado en parámetros.
     
     Esta función puede usar la versión optimizada (NumPy/Numba) o la estándar
     según la configuración. También soporta caché y compresión.
@@ -121,6 +124,8 @@ def generar_frame_mandelbrot(
             - max_iter: Iteraciones máximas
             - x_min, x_max: Rango en eje X
             - y_min, y_max: Rango en eje Y
+            - fractal_type: (opcional) 'mandelbrot' o 'julia' (default: 'mandelbrot')
+            - fractal_params: (opcional) Dict con parámetros específicos del fractal
             - use_optimized: (opcional) Forzar versión optimizada
             - compress: (opcional) Comprimir resultado
         progress_callback: Callback opcional para reportar progreso
@@ -160,7 +165,11 @@ def generar_frame_mandelbrot(
         # Determinar si usar versión optimizada
         use_optimized = params.get('use_optimized', config.get('rendering.use_optimized', True))
         
-        logger.info(f"Iniciando frame {frame_num} ({width}x{height}, {max_iter} iter) - "
+        # Determinar tipo de fractal y parámetros específicos
+        fractal_type = params.get('fractal_type', 'mandelbrot')
+        fractal_params = params.get('fractal_params', {})
+        
+        logger.info(f"Iniciando frame {frame_num} - {fractal_type} ({width}x{height}, {max_iter} iter) - "
                    f"Modo: {'Optimizado' if use_optimized else 'Estándar'}")
         
         # Publicar progreso 50% (renderizando)
@@ -168,15 +177,17 @@ def generar_frame_mandelbrot(
         
         start_time = time.time()
         
-        # Renderizar según modo
+        # Renderizar según modo y tipo de fractal
         if use_optimized:
             img_bytes = _render_optimized(
+                fractal_type, fractal_params,
                 frame_num, width, height, max_iter,
                 x_min, x_max, y_min, y_max,
                 progress_callback
             )
         else:
             img_bytes = _render_standard(
+                fractal_type, fractal_params,
                 frame_num, width, height, max_iter,
                 x_min, x_max, y_min, y_max,
                 progress_callback
@@ -211,6 +222,8 @@ def generar_frame_mandelbrot(
 
 
 def _render_standard(
+    fractal_type: str,
+    fractal_params: Dict[str, Any],
     frame_num: int,
     width: int,
     height: int,
@@ -222,7 +235,16 @@ def _render_standard(
     progress_callback: Optional[Callable] = None
 ) -> bytes:
     """Renderiza usando versión estándar (Python puro)."""
-    renderer = MandelbrotRenderer()
+    # Selección dinámica de renderer según tipo de fractal
+    if fractal_type == 'mandelbrot':
+        renderer = MandelbrotRenderer()
+    elif fractal_type == 'julia':
+        from fractals import JuliaRenderer
+        c_real = fractal_params.get('c_real', -0.7)
+        c_imag = fractal_params.get('c_imag', 0.27015)
+        renderer = JuliaRenderer(c_real, c_imag)
+    else:
+        raise ValueError(f"Tipo de fractal no soportado: {fractal_type}")
     
     # Crear imagen en blanco
     img = Image.new('RGB', (width, height))
@@ -252,6 +274,8 @@ def _render_standard(
 
 
 def _render_optimized(
+    fractal_type: str,
+    fractal_params: Dict[str, Any],
     frame_num: int,
     width: int,
     height: int,
@@ -281,7 +305,16 @@ def _render_optimized(
         max_delay_ms = 50
         adaptive_threshold = 100
     
-    renderer = MandelbrotOptimizedRenderer()
+    # Selección dinámica de renderer optimizado según tipo de fractal
+    if fractal_type == 'mandelbrot':
+        renderer = MandelbrotOptimizedRenderer()
+    elif fractal_type == 'julia':
+        from fractals import JuliaOptimizedRenderer
+        c_real = fractal_params.get('c_real', -0.7)
+        c_imag = fractal_params.get('c_imag', 0.27015)
+        renderer = JuliaOptimizedRenderer(c_real, c_imag)
+    else:
+        raise ValueError(f"Tipo de fractal no soportado: {fractal_type}")
     
     # Publicar inicio con metadata
     _publish_worker_progress(frame_num, 0, 'started')
@@ -405,6 +438,10 @@ def _render_optimized(
             pass
     
     return img_bytes
+
+
+# Mantener alias para compatibilidad backward
+generar_frame_mandelbrot = generar_frame_fractal
 
 
 # Mantener funciones legacy para compatibilidad

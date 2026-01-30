@@ -236,3 +236,53 @@
 2026-01-07 00:06:42 - master - INFO - Worker 'Worker-BRAV-cd28' conectado al render #22
 2026-01-07 00:06:45 - master - INFO - Render #22 completado en 3.20s
 2026-01-07 00:06:45 - master - INFO - Progreso temporal eliminado para render #22
+2026-01-30 07:53:43 - master - INFO - Schema de base de datos creado exitosamente
+2026-01-30 07:53:43 - master - INFO - Base de datos inicializada en: cluster_data/renders.db
+2026-01-30 07:53:43 - master - WARNING - Tipo de fractal 'mandelbrot' ya existe
+2026-01-30 07:53:43 - master - WARNING - Tipo de fractal 'julia' ya existe
+2026-01-30 07:53:43 - master - INFO - Conjunto de Julia seleccionado (c = -0.7+0.2702i)
+2026-01-30 07:53:43 - master - INFO - ============================================================
+2026-01-30 07:53:43 - master - INFO - MASTER DE RENDERIZADO - JULIA ZOOM
+2026-01-30 07:53:43 - master - INFO - ============================================================
+2026-01-30 07:53:43 - master - INFO - Preset: 480p Rapido - Ideal para pruebas rapidas (30 seg - 1 min)
+2026-01-30 07:53:43 - master - INFO - Resolución: 854x480, Frames: 10, Iteraciones: 80
+2026-01-30 07:53:43 - master - INFO - Iniciando cluster Dask...
+2026-01-30 07:53:43 - master - INFO - IP Master: 10.20.141.206
+2026-01-30 07:53:43 - master - INFO - Dashboard: http://10.20.141.206:8787
+2026-01-30 07:53:43 - master - INFO - Esperando workers...
+2026-01-30 07:54:54 - master - INFO - Schema de base de datos creado exitosamente
+2026-01-30 07:54:54 - master - INFO - Base de datos inicializada en: cluster_data/renders.db
+2026-01-30 07:55:22 - master - INFO - Render #29 iniciado: 10 frames de mandelbrot
+2026-01-30 07:55:22 - master - INFO - Worker 'Worker-BRAV-2f6b' conectado al render #29
+2026-01-30 07:55:26 - master - INFO - Render #29 completado en 3.77s
+2026-01-30 07:55:26 - master - INFO - Progreso temporal eliminado para render #29
+2026-01-30 07:58:57 - master - INFO - Schema de base de datos creado exitosamente
+2026-01-30 07:58:57 - master - INFO - Base de datos inicializada en: cluster_data/renders.db
+2026-01-30 07:59:52 - master - INFO - Render #30 iniciado: 10 frames de julia
+2026-01-30 07:59:52 - master - INFO - Worker 'Worker-BRAV-e832' conectado al render #30
+2026-01-30 07:59:58 - master - INFO - Render #30 completado en 6.54s
+2026-01-30 07:59:58 - master - INFO - Progreso temporal eliminado para render #30
+2026-01-30 08:00:16 - master - INFO - Render #31 iniciado: 10 frames de mandelbrot
+2026-01-30 08:00:16 - master - INFO - Worker 'Worker-BRAV-e832' conectado al render #31
+2026-01-30 08:00:16 - master - INFO - Render #31 completado en 0.20s
+2026-01-30 08:00:16 - master - INFO - Progreso temporal eliminado para render #31
+2026-01-30 08:04:07 - master - INFO - Schema de base de datos creado exitosamente
+2026-01-30 08:04:07 - master - INFO - Base de datos inicializada en: cluster_data/renders.db
+2026-01-30 08:04:25 - master - INFO - Render #32 iniciado: 100 frames de mandelbrot
+2026-01-30 08:04:25 - master - INFO - Worker 'Worker-BRAV-b18f' conectado al render #32
+2026-01-30 08:04:49 - master - INFO - Render #32 completado en 23.52s
+2026-01-30 08:04:49 - master - INFO - Progreso temporal eliminado para render #32
+2026-01-30 08:05:29 - master - INFO - Render #33 iniciado: 100 frames de julia
+2026-01-30 08:05:30 - master - INFO - Worker 'Worker-BRAV-b18f' conectado al render #33
+2026-01-30 08:10:12 - master - INFO - Render #33 completado en 282.25s
+2026-01-30 08:10:12 - master - INFO - Progreso temporal eliminado para render #33
+2026-01-30 08:14:25 - master - INFO - Schema de base de datos creado exitosamente
+2026-01-30 08:14:25 - master - INFO - Base de datos inicializada en: cluster_data/renders.db
+2026-01-30 08:14:37 - master - INFO - Render #34 iniciado: 10 frames de julia
+2026-01-30 08:14:37 - master - INFO - Worker 'Worker-BRAV-e229' conectado al render #34
+2026-01-30 08:14:37 - master - INFO - Render #34 completado en 0.28s
+2026-01-30 08:14:37 - master - INFO - Progreso temporal eliminado para render #34
+2026-01-30 08:14:47 - master - INFO - Render #35 iniciado: 50 frames de julia
+2026-01-30 08:14:47 - master - INFO - Worker 'Worker-BRAV-e229' conectado al render #35
+2026-01-30 08:15:27 - master - INFO - Render #35 completado en 39.26s
+2026-01-30 08:15:27 - master - INFO - Progreso temporal eliminado para render #35

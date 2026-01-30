@@ -31,7 +31,7 @@ logger = get_master_logger()
 
 # Importar tarea de renderizado
 try:
-    from tareas import generar_frame_mandelbrot
+    from tareas import generar_frame_fractal, generar_frame_mandelbrot
 except ImportError:
     logger.error("Falta el archivo 'tareas.py'")
     sys.exit(1)
@@ -60,7 +60,7 @@ def calcular_params_zoom(
     zoom_final: float
 ) -> dict:
     """
-    Calcula las coordenadas matemáticas para un frame específico.
+    Calcula las coordenadas matemáticas para un frame específico de Mandelbrot.
     
     Args:
         frame_num: Número del frame (0-indexed)
@@ -90,7 +90,66 @@ def calcular_params_zoom(
         'x_min': x_centro - ancho / 2,
         'x_max': x_centro + ancho / 2,
         'y_min': y_centro - alto / 2,
-        'y_max': y_centro + alto / 2
+        'y_max': y_centro + alto / 2,
+        'fractal_type': 'mandelbrot'
+    }
+
+
+def calcular_params_julia(
+    frame_num: int,
+    total_frames: int,
+    width: int,
+    height: int,
+    max_iter: int,
+    c_real: float,
+    c_imag: float,
+    x_centro: float = 0.0,
+    y_centro: float = 0.0,
+    zoom_inicial: float = 1.0,
+    zoom_final: float = 1.0
+) -> dict:
+    """
+    Calcula parámetros para el conjunto de Julia.
+    
+    A diferencia de Mandelbrot, Julia normalmente no necesita zoom profundo
+    ya que la estructura es globalmente interesante. Se recomienda zoom moderado
+    o paneos en el plano complejo.
+    
+    Args:
+        frame_num: Número del frame
+        total_frames: Total de frames
+        width, height: Dimensiones en píxeles
+        max_iter: Iteraciones máximas
+        c_real, c_imag: Constante c del conjunto de Julia
+        x_centro, y_centro: Centro de la región de interés
+        zoom_inicial, zoom_final: Nivel de zoom (1.0 = completo)
+    
+    Returns:
+        Diccionario con parámetros para renderizar el frame
+    """
+    t = frame_num / (total_frames - 1) if total_frames > 1 else 0
+    
+    # Zoom suave (opcional, Julia es interesante sin mucho zoom)
+    zoom_actual = zoom_inicial * (zoom_final / zoom_inicial) ** t
+    
+    # Región típica: [-2, 2] x [-2, 2]
+    ancho = 4.0 / zoom_actual
+    alto = 4.0 / zoom_actual
+    
+    return {
+        'frame_num': frame_num,
+        'width': width,
+        'height': height,
+        'max_iter': max_iter,
+        'x_min': x_centro - ancho / 2,
+        'x_max': x_centro + ancho / 2,
+        'y_min': y_centro - alto / 2,
+        'y_max': y_centro + alto / 2,
+        'fractal_type': 'julia',
+        'fractal_params': {
+            'c_real': c_real,
+            'c_imag': c_imag
+        }
     }
 
 
@@ -98,6 +157,18 @@ def main():
     """Función principal del master en modo CLI."""
     # Inicializar base de datos
     db = RenderDatabase()
+    
+    # Registrar tipos de fractales en la base de datos (si no existen)
+    db.add_fractal_type(
+        name='mandelbrot',
+        description='Conjunto de Mandelbrot - z(n+1) = z(n)^2 + c, z0=0',
+        renderer_class='fractals.mandelbrot.MandelbrotRenderer'
+    )
+    db.add_fractal_type(
+        name='julia',
+        description='Conjunto de Julia - z(n+1) = z(n)^2 + c, c=constante',
+        renderer_class='fractals.julia.JuliaRenderer'
+    )
     
     # Verificar si hay render pendiente de recuperar
     if ProgressTracker.has_pending_recovery():
@@ -114,9 +185,25 @@ def main():
             logger.info("Por ahora, usa el modo GUI para recuperación automática")
     
     # Cargar configuración
-    output_dir = config.get('rendering.output_dir', './frames_renderizados')
+    base_output_dir = config.get('rendering.output_dir', './frames_renderizados')
     video_output = config.get('rendering.video_output', 'mandelbrot_zoom.mp4')
     fps = config.get('rendering.fps', 15)
+    
+    # Determinar tipo de fractal desde configuración
+    fractal_type = config.get('rendering.fractal_type', 'mandelbrot')
+    
+    # Crear directorio único con timestamp para este render
+    from datetime import datetime
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    if fractal_type == 'julia':
+        c_real = config.get('fractals.julia.c_real', -0.7)
+        c_imag = config.get('fractals.julia.c_imag', 0.27015)
+        render_name = f"julia_c{c_real:.3f}{c_imag:+.3f}i_{timestamp}"
+    else:
+        render_name = f"{fractal_type}_{timestamp}"
+    
+    output_dir = os.path.join(base_output_dir, render_name)
+    video_output = os.path.join(output_dir, f"{render_name}.mp4")
     
     # Parámetros de renderizado desde config
     preset_name = config.get('rendering.default_preset', '720p_hd')
@@ -140,14 +227,22 @@ def main():
     zoom_final = preset['zoom_final']
     zoom_inicial = 1.0
     
+    # Cargar parámetros específicos del fractal
+    if fractal_type == 'julia':
+        c_real = config.get('fractals.julia.c_real', -0.7)
+        c_imag = config.get('fractals.julia.c_imag', 0.27015)
+        logger.info(f"Conjunto de Julia seleccionado (c = {c_real}{c_imag:+.4f}i)")
+    
     os.makedirs(output_dir, exist_ok=True)
     ip = get_local_ip()
     
     logger.info("="*60)
-    logger.info("MASTER DE RENDERIZADO - MANDELBROT ZOOM")
+    logger.info(f"MASTER DE RENDERIZADO - {fractal_type.upper()} ZOOM")
     logger.info("="*60)
     logger.info(f"Preset: {preset['name']} - {preset['description']}")
     logger.info(f"Resolución: {width}x{height}, Frames: {total_frames}, Iteraciones: {max_iter}")
+    logger.info(f"Output: {output_dir}")
+    logger.info(f"Video: {video_output}")
     
     # Iniciar cluster
     scheduler_port = config.get('cluster.scheduler_port', 8786)
@@ -191,7 +286,7 @@ def main():
     if estimated_time:
         logger.info(f"Tiempo estimado: {estimated_time/60:.1f} minutos con {num_workers} workers")
     
-    logger.info(f"INICIANDO RENDERIZADO DE {total_frames} FRAMES")
+    logger.info(f"INICIANDO RENDERIZADO DE {total_frames} FRAMES - {fractal_type.upper()}")
     start_time = time.time()
     
     # Registrar render en base de datos
@@ -207,27 +302,45 @@ def main():
         'y_centro': y_centro,
         'output_dir': output_dir
     }
-    render_id = db.start_render('mandelbrot', render_config)
+    
+    # Agregar parámetros específicos de Julia si aplica
+    if fractal_type == 'julia':
+        render_config['c_real'] = c_real
+        render_config['c_imag'] = c_imag
+    
+    render_id = db.start_render(fractal_type, render_config)
     logger.info(f"Render registrado con ID: {render_id}")
     
     # Inicializar tracker de progreso
     tracker = ProgressTracker(render_id)
     
-    # Preparar tareas
-    lista_tareas = [
-        calcular_params_zoom(
-            i, total_frames, width, height, max_iter,
-            x_centro, y_centro, zoom_inicial, zoom_final
-        )
-        for i in range(total_frames)
-    ]
+    # Preparar tareas según tipo de fractal
+    if fractal_type == 'mandelbrot':
+        lista_tareas = [
+            calcular_params_zoom(
+                i, total_frames, width, height, max_iter,
+                x_centro, y_centro, zoom_inicial, zoom_final
+            )
+            for i in range(total_frames)
+        ]
+    elif fractal_type == 'julia':
+        lista_tareas = [
+            calcular_params_julia(
+                i, total_frames, width, height, max_iter,
+                c_real, c_imag, x_centro, y_centro, zoom_inicial, zoom_final
+            )
+            for i in range(total_frames)
+        ]
+    else:
+        logger.error(f"Tipo de fractal no soportado: {fractal_type}")
+        sys.exit(1)
     
     # Registrar frames en base de datos
     for i in range(total_frames):
         db.add_frame(render_id, i, status='pending')
     
-    # Enviar al cluster
-    futures = client.map(generar_frame_mandelbrot, lista_tareas)
+    # Enviar al cluster (usar función genérica)
+    futures = client.map(generar_frame_fractal, lista_tareas)
     logger.info("Tareas enviadas. Recibiendo imágenes...")
     
     frames_guardados = 0
@@ -316,23 +429,50 @@ def main():
         try:
             writer = imageio.get_writer(video_output, fps=fps)
             
+            frames_agregados = 0
+            frames_corruptos = 0
+            
             for i in range(total_frames):
                 ruta = os.path.join(output_dir, f"frame_{i:04d}.png")
                 if os.path.exists(ruta):
-                    img = imageio.imread(ruta)
-                    writer.append_data(img)
+                    try:
+                        # Intentar cargar frame con PIL primero para validar
+                        from PIL import Image
+                        img_test = Image.open(ruta)
+                        img_test.verify()  # Verificar integridad
+                        
+                        # Si pasó verificación, agregarlo al video
+                        img_test.close()
+                        frame = imageio.imread(ruta)
+                        writer.append_data(frame)
+                        frames_agregados += 1
+                        
+                        if (i + 1) % 10 == 0:
+                            logger.info(f"Video: {frames_agregados}/{total_frames} frames agregados")
+                    
+                    except Exception as e:
+                        frames_corruptos += 1
+                        logger.warning(f"⚠️  Frame {i} corrupto, omitiendo: {e}")
+                        # Continuar con el siguiente frame
+                        continue
                 else:
-                    logger.warning(f"Falta el frame {i}")
+                    logger.warning(f"Frame {i} no encontrado: {ruta}")
             
             writer.close()
-            logger.info(f"VIDEO LISTO! -> {os.path.abspath(video_output)}")
             
-            # Marcar como completado en DB
-            db.complete_render(render_id, tiempo_render, os.path.abspath(video_output))
+            if frames_corruptos > 0:
+                logger.warning(f"⚠️  Video generado con {frames_corruptos} frames corruptos omitidos")
+                logger.info(f"✅ Video guardado: {video_output} ({frames_agregados}/{total_frames} frames)")
+            else:
+                logger.info(f"✅ Video guardado exitosamente: {video_output}")
+            
+            # Actualizar DB solo si video se generó
+            db.complete_render(render_id, tiempo_render)
             tracker.clear()
             
         except Exception as e:
-            logger.error(f"Error creando video: {e}")
+            logger.error(f"Error ensamblando video: {e}")
+            logger.info("Frames guardados en: " + output_dir)
             db.update_render_status(render_id, 'failed')
     else:
         logger.error("No se puede generar video con frames faltantes")

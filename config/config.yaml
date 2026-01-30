@@ -14,9 +14,10 @@ cluster:
     profile_interval: 2000ms
 
 rendering:
-  default_preset: "720p_hd"
+  fractal_type: julia  # 'mandelbrot' o 'julia'
+  default_preset: "480p_rapido"
   output_dir: "./frames_renderizados"
-  video_output: "mandelbrot_zoom.mp4"
+  video_output: "fractal_zoom.mp4"
   fps: 15
   
   # Usar versión optimizada con NumPy/Numba
@@ -47,6 +48,22 @@ fractals:
     zoom_range:
       initial: 1.0
       final: 30000.0
+  
+  julia:
+    # Constante c para el conjunto de Julia
+    # Valores interesantes:
+    # (-0.7, 0.27015): "Douady's rabbit" - estructura dendrítica
+    # (-0.4, 0.6): "San Marco fractal" - simetría cuádruple
+    # (0.285, 0.01): "Siegel disk" - espirales suaves
+    # (-0.70176, -0.3842): Estructura de "dragón"
+    c_real: -0.7
+    c_imag: 0.27015
+    default_center:
+      x: 0.0
+      y: 0.0
+    zoom_range:
+      initial: 1.0
+      final: 2.0  # Julia no requiere zoom extremo
 
 gui:
   theme: dark
