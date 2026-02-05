@@ -27,6 +27,7 @@ dask.config.set({
 # NOTA: Asegúrate de tener los archivos en la carpeta 'utils'
 from utils.database import RenderDatabase
 from utils.progress_tracker import ProgressTracker, RecoveryManager
+from utils.gpu_monitor import GPUMonitor, PerformanceTracker
 
 
 class RenderThread(QThread):
@@ -85,6 +86,9 @@ class RenderThread(QThread):
                     'x_max': self.config['x_centro'] + ancho / 2,
                     'y_min': self.config['y_centro'] - alto / 2,
                     'y_max': self.config['y_centro'] + alto / 2,
+                    # CRITICAL: Pasar configuración de backend a los workers
+                    'use_cuda': self.config.get('use_cuda', False),
+                    'use_optimized': True,
                 }
                 
                 # Agregar tipo de fractal y parámetros específicos
@@ -233,6 +237,12 @@ class MasterWindow(QMainWindow):
         self.db = RenderDatabase()  # Inicializar base de datos
         self.render_id = None
         self.tracker = None
+        
+        # GPU monitoring
+        self.gpu_monitor = GPUMonitor()
+        self.perf_tracker = PerformanceTracker()
+        self.metrics_timer = None
+        
         self.load_presets()
         
         self.init_ui()
@@ -352,6 +362,40 @@ class MasterWindow(QMainWindow):
         
         # Inicialmente ocultar si Mandelbrot está seleccionado
         self.julia_params_group.setVisible(default_fractal == 'julia')
+        
+        # Backend Selector (CPU/GPU) - NUEVO
+        backend_group = QGroupBox("Backend de Renderizado")
+        backend_layout = QVBoxLayout()
+        
+        # Radio buttons
+        from PyQt5.QtWidgets import QRadioButton, QButtonGroup
+        self.backend_group_buttons = QButtonGroup()
+        
+        self.cpu_radio = QRadioButton("⚡ CPU (Numba)")
+        self.cpu_radio.setToolTip("Rápido, funciona en todas las máquinas")
+        self.cpu_radio.setChecked(not config.get('rendering.use_cuda', False))
+        self.backend_group_buttons.addButton(self.cpu_radio, 0)
+        backend_layout.addWidget(self.cpu_radio)
+        
+        self.gpu_radio = QRadioButton("🚀 GPU (CUDA)")
+        self.gpu_radio.setToolTip("Muy rápido, requiere GPU NVIDIA")
+        self.gpu_radio.setChecked(config.get('rendering.use_cuda', False))
+        self.backend_group_buttons.addButton(self.gpu_radio, 1)
+        backend_layout.addWidget(self.gpu_radio)
+        
+        # GPU status label
+        self.gpu_status_label = QLabel()
+        self.gpu_status_label.setStyleSheet("color: #b0b0b0; font-size: 11px;")
+        self._update_gpu_status_label()
+        backend_layout.addWidget(self.gpu_status_label)
+        
+        # Detect GPU button
+        detect_gpu_btn = QPushButton("🔍 Detectar GPU")
+        detect_gpu_btn.clicked.connect(self._detect_gpu_capability)
+        backend_layout.addWidget(detect_gpu_btn)
+        
+        backend_group.setLayout(backend_layout)
+        layout.addWidget(backend_group)
         
         # Preset Selector
         preset_group = QGroupBox("Preset de Configuracion")
@@ -563,6 +607,11 @@ class MasterWindow(QMainWindow):
         
         log_group.setLayout(log_layout)
         layout.addWidget(log_group)
+        
+        # GPU Metrics Panel (NUEVO)
+        from utils.gui_metrics_helper import add_metrics_panel_to_dashboard
+        metrics_panel = add_metrics_panel_to_dashboard(self)
+        layout.addWidget(metrics_panel)
         
         return tab
     
@@ -890,6 +939,16 @@ class MasterWindow(QMainWindow):
             self.c_real_spin.setValue(c_real)
             self.c_imag_spin.setValue(c_imag)
     
+    def _update_gpu_status_label(self):
+        """Actualizar label de estado GPU."""
+        from utils.gui_metrics_helper import update_gpu_status_label
+        update_gpu_status_label(self)
+    
+    def _detect_gpu_capability(self):
+        """Detectar y mostrar capacidades de la GPU."""
+        from utils.gui_metrics_helper import detect_gpu_capability
+        detect_gpu_capability(self)
+    
     def check_recovery(self):
         """Verifica si hay renders pendientes de recuperar."""
         if not ProgressTracker.has_pending_recovery():
@@ -1007,6 +1066,16 @@ class MasterWindow(QMainWindow):
             QMessageBox.warning(self, "Sin Workers", "Necesitas al menos 1 worker conectado")
             return
         
+        # Aplicar backend seleccionado al config (NUEVO)
+        from utils.config import config
+        use_cuda = self.gpu_radio.isChecked()
+        config.set('rendering.use_cuda', use_cuda)
+        self.log(f"Backend seleccionado: {'🚀 CUDA (GPU)' if use_cuda else '⚡ Numba (CPU)'}")
+        
+        # Iniciar metrics timer (NUEVO)
+        from utils.gui_metrics_helper import start_metrics_timer
+        start_metrics_timer(self)
+        
         # Configuración del renderizado
         fractal_type = self.fractal_type_combo.currentData()
         
@@ -1043,7 +1112,9 @@ class MasterWindow(QMainWindow):
             'output_dir': output_dir,
             'preset': self.preset_combo.currentData(),
             'fractal_type': fractal_type,
-            'julia_params': julia_params
+            'julia_params': julia_params,
+            # CRITICAL: Incluir configuración de backend CUDA
+            'use_cuda': self.gpu_radio.isChecked(),
         }
         
         self.log(f"Directorio de salida: {output_dir}")

@@ -1,5 +1,9 @@
 # Proyecto Final - Renderizado Distribuido de Fractales de Mandelbrot
 
+.\.venv\Scripts\activate
+desactivate
+
+
 ## 🎯 Descripción
 
 Sistema de renderizado distribuido de fractales de Mandelbrot utilizando computación paralela con **Dask Distributed**. El sistema genera animaciones de zoom profundo en el conjunto de Mandelbrot aprovechando múltiples computadoras conectadas en red.

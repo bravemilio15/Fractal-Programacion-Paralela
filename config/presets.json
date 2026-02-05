@@ -32,6 +32,17 @@
     "x_centro": -0.7436438870371587,
     "y_centro": 0.1318259042053119
   },
+  "4k_gpu_intensive": {
+    "name": "4K GPU Intensive",
+    "description": "⚡ GPU STRESS TEST - 4K @ 2000 iter",
+    "width": 3840,
+    "height": 2160,
+    "total_frames": 10,
+    "max_iter": 2000,
+    "zoom_final": 50000.0,
+    "x_centro": -0.7436438870371587,
+    "y_centro": 0.1318259042053119
+  },
   "custom": {
     "name": "Custom",
     "description": "Configuracion personalizada",

@@ -14,7 +14,7 @@ cluster:
     profile_interval: 2000ms
 
 rendering:
-  fractal_type: julia  # 'mandelbrot' o 'julia'
+  fractal_type: mandelbrot  # 'mandelbrot' o 'julia'
   default_preset: "480p_rapido"
   output_dir: "./frames_renderizados"
   video_output: "fractal_zoom.mp4"
@@ -22,6 +22,11 @@ rendering:
   
   # Usar versión optimizada con NumPy/Numba
   use_optimized: true
+  
+  # Usar aceleración GPU con CUDA (requiere GPU NVIDIA + CuPy)
+  # Si no está disponible, hace fallback automático a use_optimized
+  use_cuda: true  # ✓ ACTIVADO - GPU funcionando
+  cuda_device: 0  # ID del dispositivo GPU (0 = primera GPU)
   
   # Comprimir frames antes de enviar por red
   # NOTA: Desactivado por defecto para mejor compatibilidad con GUI

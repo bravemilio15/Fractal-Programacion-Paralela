@@ -162,15 +162,38 @@ def generar_frame_fractal(
                 _publish_worker_progress(frame_num, 100, 'completed')
                 return frame_num, cached_bytes
         
-        # Determinar si usar versión optimizada
+        # === SELECCIÓN DE BACKEND DE RENDERIZADO ===
+        # Orden de prioridad (con fallbacks automáticos):
+        # 1. CUDA (GPU) - si está habilitado y disponible
+        # 2. Optimizado (Numba) - si está habilitado  
+        # 3. Estándar (Python puro) - fallback final
+        
+        use_cuda = params.get('use_cuda', config.get('rendering.use_cuda', False))
         use_optimized = params.get('use_optimized', config.get('rendering.use_optimized', True))
         
         # Determinar tipo de fractal y parámetros específicos
         fractal_type = params.get('fractal_type', 'mandelbrot')
         fractal_params = params.get('fractal_params', {})
         
+        # Intentar CUDA si está habilitado (soporta Mandelbrot y Julia)
+        backend_used = "Estándar"
+        if use_cuda and fractal_type in ('mandelbrot', 'julia'):
+            try:
+                from fractals import CUDA_AVAILABLE
+                if CUDA_AVAILABLE:
+                    backend_used = "CUDA (GPU)"
+                    use_optimized = 'cuda'  # Marca especial
+                else:
+                    logger.warning(f"Frame {frame_num}: CUDA no disponible, usando Numba")
+                    backend_used = "Numba (fallback)"
+            except Exception as e:
+                logger.warning(f"Frame {frame_num}: Error con CUDA: {e}, usando Numba")
+                backend_used = "Numba (fallback)"
+        elif use_optimized:
+            backend_used = "Optimizado (Numba)"
+        
         logger.info(f"Iniciando frame {frame_num} - {fractal_type} ({width}x{height}, {max_iter} iter) - "
-                   f"Modo: {'Optimizado' if use_optimized else 'Estándar'}")
+                   f"Backend: {backend_used}")
         
         # Publicar progreso 50% (renderizando)
         _publish_worker_progress(frame_num, 50, 'rendering')
@@ -178,7 +201,14 @@ def generar_frame_fractal(
         start_time = time.time()
         
         # Renderizar según modo y tipo de fractal
-        if use_optimized:
+        if use_optimized == 'cuda':  # CUDA habilitado y disponible
+            img_bytes = _render_cuda(
+                fractal_type, fractal_params,
+                frame_num, width, height, max_iter,
+                x_min, x_max, y_min, y_max,
+                progress_callback
+            )
+        elif use_optimized:  # Numba/NumPy optimizado
             img_bytes = _render_optimized(
                 fractal_type, fractal_params,
                 frame_num, width, height, max_iter,
@@ -271,6 +301,71 @@ def _render_standard(
     img_byte_arr = io.BytesIO()
     img.save(img_byte_arr, format='PNG')
     return img_byte_arr.getvalue()
+
+
+def _render_cuda(
+    fractal_type: str,
+    fractal_params: Dict[str, Any],
+    frame_num: int,
+    width: int,
+    height: int,
+    max_iter: int,
+    x_min: float,
+    x_max: float,
+    y_min: float,
+    y_max: float,
+    progress_callback: Optional[Callable] = None
+) -> bytes:
+    """Renderiza usando GPU con CUDA (CuPy)."""
+    try:
+        from fractals import MandelbrotCUDARenderer
+        
+        # Crear renderer GPU
+        renderer = MandelbrotCUDARenderer(device_id=config.get('rendering.cuda_device', 0))
+        
+        # Publicar inicio
+        _publish_worker_progress(frame_num, 0, 'started')
+        
+        # Obtener parámetros de Julia si aplica
+        c_real = fractal_params.get('c_real', -0.7) if fractal_type == 'julia' else -0.7
+        c_imag = fractal_params.get('c_imag', 0.27015) if fractal_type == 'julia' else 0.27015
+        
+        # Calcular en GPU con tipo de fractal correcto
+        calc_start = time.time()
+        iterations = renderer.calculate_array(
+            width, height, x_min, x_max, y_min, y_max, max_iter,
+            fractal_type=fractal_type,
+            c_real=c_real,
+            c_imag=c_imag
+        )
+        calc_time = time.time() - calc_start
+        
+        _publish_worker_progress(frame_num, 50, 'rendering')
+        
+        # Convertir a RGB (en CPU)
+        rgb_start = time.time()
+        rgb_array = renderer.render_to_rgb(iterations, max_iter, progress_callback)
+        rgb_time = time.time() - rgb_start
+        
+        _publish_worker_progress(frame_num, 80, 'rendering')
+        
+        # Convertir a imagen PIL
+        img = Image.fromarray(rgb_array, mode='RGB')
+        
+        # Guardar a bytes
+        buffer = io.BytesIO()
+        img.save(buffer, format='PNG')
+        img_bytes = buffer.getvalue()
+        
+        logger.debug(f"Frame {frame_num} CUDA: cálculo={calc_time:.2f}s, RGB={rgb_time:.2f}s")
+        
+        return img_bytes
+        
+    except Exception as e:
+        # Si CUDA falla, hacer fallback a Numba
+        logger.error(f"Frame {frame_num}: Error en CUDA: {e}, usando Numba")
+        return _render_optimized(fractal_type, fractal_params, frame_num, width, height,
+                                max_iter, x_min, x_max, y_min, y_max, progress_callback)
 
 
 def _render_optimized(
